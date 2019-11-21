@@ -2,6 +2,7 @@
 Core Models
 """
 import os
+import yaml
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.conf import settings
@@ -153,7 +154,49 @@ class Work(models.Model):
         """
         work_dir
         """
-        return os.path.join(settings.WEBMD_USERDATA_DIR, '%d/works/%d' % (self.owner.id, self.id))
+        return os.path.join(settings.WEBMD_USERDATA_DIR, '%d/trajectories/%d' % (self.owner.id, self.id))
+
+    @property
+    def simulations(self):
+        """
+        simulations
+        """
+        simulations_file = os.path.join(self.work_dir, 'simulations.yml')
+        if not os.path.exists(simulations_file):
+            return {}
+
+        with open(simulations_file, 'r') as stream:
+            sim = yaml.load(stream, Loader=yaml.Loader)
+
+        stages = ['min', 'eq', 'md']
+        for i, stage in enumerate(stages):
+            for j, item in enumerate(sim[stage]):
+                if j > 0:
+                    previous = sim[stage][j-1]
+                else:
+                    if i > 0:
+                        previous = sim[stages[i-1]][-1]
+                    else:
+                        previous = None
+
+                item['runnable'] = False
+                if stage in  ('min', 'eq'):
+                    pdb_path = '/%s/%s%d.pdb' % (stage, stage, j+1)
+                else:
+                    pdb_path = '/%s/%d/%s.pdb' % (stage, j+1, stage)
+
+                if os.path.exists(os.path.join(self.work_dir, pdb_path)):
+                    item['done'] = True
+                    item['pdb'] = '/api/webmd/users/%d/files/trajectories/%d' % (self.owner.id, self.id) + pdb_path
+                    item['deletable'] = False
+                else:
+                    item['done'] = False
+                    item['deletable'] = True
+                    if (j == i == 0) or previous['done']:
+                        item['runnable'] = True
+                        if j != i == 0:
+                            previous['deletable'] = True
+            return sim
 
 
 class WorkAnalysisJob(models.Model):

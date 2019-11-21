@@ -17,7 +17,7 @@ class UserInfo(models.Model):
     """
     UserInfo
     """
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='info')
     country = models.CharField(max_length=100, blank=True)
     state = models.CharField(max_length=200, blank=True)
     city = models.CharField(max_length=200, blank=True)
@@ -159,11 +159,12 @@ class Work(models.Model):
             file = kwargs.get('file')
             filename = file.name
             save_uploaded_pdb(file, instance.work_dir)
+
         history = WorkHistory.objects.create(
             work_id=instance.id,
             email=email,
-            name=owner.name if owner else kwargs.get('name'),
-            position=owner.info.position if owner else kwargs.get('title'),
+            name=owner.info.name if owner else kwargs.get('name'),
+            position=owner.info.title if owner else kwargs.get('title'),
             org1=owner.info.organization if owner else kwargs.get('organization'),
             filename=filename,
             ip_addr=remote_ip,
@@ -279,6 +280,10 @@ class Work(models.Model):
         work_history
         """
         return WorkHistory.objects.filter(work_id=self.id).first()
+
+    @property
+    def pdb(self):
+        return "/api/solvation-free-energy/works/{}/files/model/".format(self.id)
 
 class WorkJob(models.Model):
     """

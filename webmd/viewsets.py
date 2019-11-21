@@ -81,7 +81,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return self.queryset.none()
-        return self.queryset.filter(owner=self.request.user)
+        return self.queryset.filter(owner=self.request.user).order_by('-created_at')
 
     @transaction.atomic()
     def create(self, request, *args, **kwargs):

@@ -61,33 +61,43 @@ class WorkViewSet(viewsets.ModelViewSet):
             assert request.data.get('mode') and request.data.get('mode') in ('m', 't', 'a', 'x')
             assert request.data.get('source') and request.data.get('source') in ('rcsb', 'upload')
             assert (request.data.get('source') == 'rcsb' and request.data.get('pdb_id')) or (request.data.get('source') == 'upload' and request.FILES.get('file'))
-            assert not request.user.is_authenticated and request.data.get('email')
-            assert not request.user.is_authenticated and request.data.get('title')
-            assert not request.user.is_authenticated and request.data.get('organization')
+            assert request.data.get('email') and request.data.get('name') and request.data.get('title') and request.data.get('organization')
 
             x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
             remote_ip = x_forwarded_for.split(',')[0] if x_forwarded_for else request.META.get('REMOTE_ADDR')
 
-            if request.data['source'] == 'rcsb':
-                create_args = {'pdb_id': request.data['pdb_id']}
-            else:
-                create_args = {'file': request.FILES['file']}
-
+            name = request.data['name']
+            email = request.data['email']
+            title = request.data['title']
+            organization = request.data['organization']
             owner = request.user if request.user.is_authenticated else None
-            if not owner:
-                create_args['name'] = request.data['name']
-                create_args['title'] = request.data['title']
-                create_args['organization'] = request.data['organization']
 
-            work = Work.create(
-                email=owner.email if owner else request.data['email'],
-                owner=owner,
-                source=request.data['source'],
-                mode=request.data['mode'],
-                remote_ip=remote_ip,
-                **create_args
-            )
-
+            if request.data['source'] == 'rcsb':                
+                pdb_id = request.data['pdb_id']
+                work = Work.create(
+                    owner=owner,
+                    source=request.data['source'],
+                    mode=request.data['mode'],
+                    remote_ip=remote_ip,
+                    name=name,
+                    email=email,
+                    title=title,
+                    pdb_id=pdb_id,
+                    organization=organization
+                )
+            else:
+                pdb_file = request.FILES['file']
+                work = Work.create(
+                    owner=owner,
+                    source=request.data['source'],
+                    mode=request.data['mode'],
+                    remote_ip=remote_ip,
+                    name=name,
+                    email=email,
+                    title=title,
+                    file=pdb_file,
+                    organization=organization
+                )
             return Response(work.run(), status=201)
         except AssertionError:
             return Response(data={'created': False, 'work': None}, status=400)
@@ -132,7 +142,7 @@ class WorkViewSet(viewsets.ModelViewSet):
             file_to_send = ContentFile(stream.read())
             response = HttpResponse(file_to_send, 'chemical/x-pdb')
             response['Content-Length'] = file_to_send.size
-            response['Content-Disposition'] = 'attachment; filename="model.pdb"'
+            response['Content-Disposition'] = 'attachment; filename="prowave_SFE_%s_model.pdb"' % pk
             return response
 
     @action(methods=['GET'], url_path='files/plot', detail=True)
@@ -148,7 +158,7 @@ class WorkViewSet(viewsets.ModelViewSet):
             file_to_send = ContentFile(stream.read())
             response = HttpResponse(file_to_send, 'image/svg+xml')
             response['Content-Length'] = file_to_send.size
-            response['Content-Disposition'] = 'attachment; filename="plot.svg"'
+            response['Content-Disposition'] = 'attachment; filename="prowave_SFE_%s_plot.svg"' % pk
             return response
 
 

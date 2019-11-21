@@ -38,6 +38,8 @@ class WorkSerializer(serializers.ModelSerializer):
     history = WorkHistorySerializer(many=False, read_only=True)
     result = serializers.JSONField()
     status = serializers.JSONField()
+    pdb = serializers.ReadOnlyField()
+    plot = serializers.ReadOnlyField()
 
     class Meta:
         """

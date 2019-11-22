@@ -168,35 +168,32 @@ class Work(models.Model):
         with open(simulations_file, 'r') as stream:
             sim = yaml.load(stream, Loader=yaml.Loader)
 
-        stages = ['min', 'eq', 'md']
-        for i, stage in enumerate(stages):
-            for j, item in enumerate(sim[stage]):
-                if j > 0:
-                    previous = sim[stage][j-1]
-                else:
-                    if i > 0:
-                        previous = sim[stages[i-1]][-1]
-                    else:
-                        previous = None
+        base_url = '/api/webmd/users/%d/files/trajectories/%d' % (self.owner.id, self.id)
 
-                item['runnable'] = False
-                if stage in  ('min', 'eq'):
-                    pdb_path = '/%s/%s%d.pdb' % (stage, stage, j+1)
+        previous = dict()
+        for stage, items in sim.items():
+            for j, item in enumerate(items):
+                if stage in ('min', 'eq'):
+                    base_path = '%s%d.pdb' % (stage, j+1)
                 else:
-                    pdb_path = '/%s/%d/%s.pdb' % (stage, j+1, stage)
+                    base_path = '%d/%s.pdb' % (j+1, stage)
+                pdb_path = os.path.join(self.work_dir, stage, base_path)
 
-                if os.path.exists(os.path.join(self.work_dir, pdb_path)):
-                    item['done'] = True
-                    item['pdb'] = '/api/webmd/users/%d/files/trajectories/%d' % (self.owner.id, self.id) + pdb_path
-                    item['deletable'] = False
-                else:
-                    item['done'] = False
-                    item['deletable'] = True
-                    if (j == i == 0) or previous['done']:
+                item['done'] = os.path.exists(pdb_path)
+                if not item['done']:
+                    if not previous:
                         item['runnable'] = True
-                        if j != i == 0:
-                            previous['deletable'] = True
-            return sim
+                    else:
+                        item['runnable'] = previous['done']
+                        previous['deletable'] = item['runnable']
+                    item['deletable'] = True
+                else:
+                    item['pdb'] = '%s/%s/%s' % (base_url, stage, base_path)
+                    if stage == 'md':
+                        item['dcd'] = '%s/%s/%d/%s.dcd' % (base_url, stage, j+1, stage)
+                    item['deletable'] = False
+                previous = item
+        return sim
 
 
 class WorkAnalysisJob(models.Model):

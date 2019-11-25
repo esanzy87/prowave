@@ -163,7 +163,7 @@ class Work(models.Model):
         """
         simulations_file = os.path.join(self.work_dir, 'simulations.yml')
         if not os.path.exists(simulations_file):
-            return {}
+            return None
 
         with open(simulations_file, 'r') as stream:
             sim = yaml.load(stream, Loader=yaml.Loader)

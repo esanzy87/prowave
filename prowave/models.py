@@ -46,13 +46,6 @@ class UserInfo(models.Model):
         """
         return self.user.is_active
 
-    @property
-    def work_list(self):
-        """
-        UserInfo.work_list
-        """
-        return [work for work in self.user.prowave_works.order_by('-created_at').all()[:30]]
-
 
 class GeoIPMixin:
     """

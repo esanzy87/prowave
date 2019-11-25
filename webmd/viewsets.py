@@ -49,11 +49,13 @@ import os
 import subprocess
 from django.conf import settings
 from django.db import transaction
-from rest_framework import viewsets, routers, status
+from rest_framework import viewsets, routers
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from rest_framework.parsers import FormParser, MultiPartParser
 
+from prowave.utils import get_rcsb_pdb, save_uploaded_pdb
 from .models import Project, Work as Trajectory
 from .serializers import ProjectSerializer, TrajectorySerializer
 
@@ -77,6 +79,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     """
     queryset = Project.objects
     serializer_class = ProjectSerializer
+    parser_classes = (FormParser, MultiPartParser)
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
@@ -93,6 +96,31 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 subject=request.data.get('subject', 'WebMD Project'),
                 owner=request.user
             )
+
+            if request.data['source'] == 'rcsb':
+                filename = '%s.pdb' % request.data['pdb_id']
+            else:
+                filename = request.data['pdb_file'].name
+
+            traj_A = Trajectory.objects.create(
+                owner=request.user,
+                name='Trajectory A',
+                filename=filename,
+                uploaded=request.data['source'] == 'upload',
+                cut=request.data.get('cut', 9.0),
+                buffer_size=request.data.get('buffer_size', 10.0),
+                solvent_model=request.data['water_model'],
+                cation=request.data['cation'],
+                anion=request.data['anion'],
+                project=instance
+            )
+
+            os.makedirs(traj_A.work_dir, exist_ok=True)
+            if request.data['source'] == 'rcsb':
+                get_rcsb_pdb(request.data['pdb_id'], traj_A.work_dir)
+            else:
+                save_uploaded_pdb(request.data['pdb_file'], traj_A.work_dir)
+
             return Response(data=self.serializer_class(instance).data)
         else:
             raise PermissionDenied

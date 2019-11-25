@@ -1,6 +1,7 @@
 """
 auth.serializers
 """
+from django.contrib.auth.models import User
 from rest_framework import serializers
 from prowave.models import UserInfo
 
@@ -15,5 +16,4 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserInfo
-        fields = ('country', 'state', 'city', 'organization', 'department',
-                  'title', 'name', 'email', 'is_active')
+        fields = '__all__'

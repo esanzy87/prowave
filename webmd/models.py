@@ -15,7 +15,8 @@ class UserMeta(models.Model):
     """
     deprecated
     """
-    user = models.OneToOneField(User, related_name='meta', on_delete=models.CASCADE)
+    user = models.OneToOneField(User, related_name='meta',
+                                on_delete=models.CASCADE)
     organization = models.CharField(max_length=500)
 
 
@@ -54,7 +55,8 @@ class Project(models.Model):
     """
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(User, related_name='projects', on_delete=models.CASCADE)
+    owner = models.ForeignKey(User, related_name='projects',
+                              on_delete=models.CASCADE)
     subject = models.CharField(max_length=200)
 
     @property
@@ -77,7 +79,8 @@ class Work(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    owner = models.ForeignKey(User, related_name='works', on_delete=models.CASCADE)
+    owner = models.ForeignKey(User, related_name='works',
+                              on_delete=models.CASCADE)
     name = models.CharField(max_length=20, default="Default Work")
     nres = models.IntegerField(default=0)  # Protein residue 길이
     filename = models.CharField(max_length=500, default='', blank=True)
@@ -89,19 +92,18 @@ class Work(models.Model):
     cation = models.CharField(max_length=5, default='Na+')
     anion = models.CharField(max_length=5, default='Cl-')
     ref_temp = models.IntegerField(default=300)
-    project = models.ForeignKey(Project, null=True, on_delete=models.SET_NULL)
+    project = models.ForeignKey(Project, null=True,
+                                on_delete=models.SET_NULL)
     is_deleted = models.BooleanField(default=False)
 
     @classmethod
     @transaction.atomic()
-    def create(cls, owner, source, project, **kwargs):
+    def create(cls, owner, source, project, solvent_model, buffer_size, cut,
+               **kwargs):
         """
         Work.create
         """
         uploaded = source == 'upload'
-        solvent_model = kwargs.get('solvetn_model') if 'solvent_model' in kwargs else 'TIP3PBOX'
-        buffer_size = kwargs.get('buffer_size') if 'buffer_size' in kwargs else 10.0
-        cut = kwargs.get('cut') if 'cut' in kwargs else 9.0
         instance = cls.objects.create(
             owner=owner,
             project=project,
@@ -110,6 +112,7 @@ class Work(models.Model):
             buffer_size=buffer_size,
             cut=cut
         )
+        os.makedirs(instance.work_dir, exist_ok=True)
         if source == 'rcsb':
             pdb_id = kwargs.get('pdb_id')
             filename = '%s.pdb' % pdb_id
@@ -122,8 +125,10 @@ class Work(models.Model):
         if 'name' in kwargs:
             instance.name = kwargs.get('name')
         instance.save()
+        return instance
 
-    def cleanup(self, model_index=0, chain_ids=tuple(), solvent_ions=tuple(), ligand_name=None):
+    def cleanup(self, model_index=0, chain_ids=tuple(), solvent_ions=tuple(),
+                ligand_name=None):
         """
         Work.cleanup
         """
@@ -154,7 +159,52 @@ class Work(models.Model):
         """
         work_dir
         """
-        return os.path.join(settings.WEBMD_USERDATA_DIR, '%d/trajectories/%d' % (self.owner.id, self.id))
+        basepath = '%d/trajectories/%d' % (self.owner.id, self.id)
+        return os.path.join(settings.WEBMD_USERDATA_DIR, basepath)
+
+    
+    def get_topology(self, filename):
+        with open(os.path.join(self.work_dir, filename), 'r') as stream:
+            topo = Topology(stream)
+        return topo
+
+    @property
+    def models(self):
+        topo = self.get_topology(self.filename)
+        return [i for i in range(len(topo.models))]
+
+    @property
+    def chains(self):
+        topo = self.get_topology(self.filename)
+        return topo.chains
+
+    @property
+    def solvent_ions(self):
+        topo = self.get_topology(self.filename)
+        return topo.solvent_ions
+
+    @property
+    def non_standards(self):
+        if not os.path.exists(os.path.join(self.work_dir, 'cleaned.pdb')):
+            return []
+        topo = self.get_topology('cleaned.pdb')
+        return topo.non_standards
+    
+    @property
+    def disulfide_bond_candidates(self):
+        if not os.path.exists(os.path.join(self.work_dir, 'cleaned.pdb')):
+            return []
+        topo = self.get_topology('cleaned.pdb')
+        return topo.disulfide_bond_candidates
+
+    
+
+    @property
+    def protonation_states(self):
+        if not os.path.exists(os.path.join(self.work_dir, 'cleaned.pdb')):
+            return []
+        topo = self.get_topology('cleaned.pdb')
+        return topo.protonation_states
 
     @property
     def simulations(self):
@@ -168,7 +218,8 @@ class Work(models.Model):
         with open(simulations_file, 'r') as stream:
             sim = yaml.load(stream, Loader=yaml.Loader)
 
-        base_url = '/api/webmd/users/%d/files/trajectories/%d' % (self.owner.id, self.id)
+        base_url = '/api/webmd/users/%d/files/trajectories/%d' \
+            % (self.owner.id, self.id)
 
         previous = dict()
         for stage, items in sim.items():
@@ -190,7 +241,8 @@ class Work(models.Model):
                 else:
                     item['pdb'] = '%s/%s/%s' % (base_url, stage, base_path)
                     if stage == 'md':
-                        item['dcd'] = '%s/%s/%d/%s.dcd' % (base_url, stage, j+1, stage)
+                        item['dcd'] = '%s/%s/%d/%s.dcd' \
+                            % (base_url, stage, j+1, stage)
                     item['deletable'] = False
                 previous = item
         return sim

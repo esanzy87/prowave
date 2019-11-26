@@ -91,39 +91,34 @@ class ProjectViewSet(viewsets.ModelViewSet):
         """
         webmd.viewsets.ProjectViewSet.create
         """
-        if request.user.is_authenticated:
-            instance = Project.objects.create(
-                subject=request.data.get('subject', 'WebMD Project'),
-                owner=request.user
-            )
+        if not request.user.is_authenticated:
+            return PermissionDenied
 
-            if request.data['source'] == 'rcsb':
-                filename = '%s.pdb' % request.data['pdb_id']
-            else:
-                filename = request.data['pdb_file'].name
+        instance = Project.objects.create(
+            subject=request.data.get('subject', 'WebMD Project'),
+            owner=request.user
+        )
 
-            traj_A = Trajectory.objects.create(
-                owner=request.user,
-                name='Trajectory A',
-                filename=filename,
-                uploaded=request.data['source'] == 'upload',
-                cut=request.data.get('cut', 9.0),
-                buffer_size=request.data.get('buffer_size', 10.0),
-                solvent_model=request.data['water_model'],
-                cation=request.data['cation'],
-                anion=request.data['anion'],
-                project=instance
-            )
+        create_args = dict(
+            owner=request.user,
+            source=request.data['source'],
+            project=instance,
+            pdb_id=request.data['pdb_id'],
+            solvent_model=request.data.get('water_model', 'TIP3PBOX'),
+            buffer_size=request.data.get('buffer_size', 10.0),
+            cut=request.data.get('cut', 9.0),
+            cation=request.data.get('cation', 'Na+'),
+            anion=request.data.get('anion', 'Cl-'),
+        )
 
-            os.makedirs(traj_A.work_dir, exist_ok=True)
-            if request.data['source'] == 'rcsb':
-                get_rcsb_pdb(request.data['pdb_id'], traj_A.work_dir)
-            else:
-                save_uploaded_pdb(request.data['pdb_file'], traj_A.work_dir)
-
-            return Response(data=self.serializer_class(instance).data)
+        if request.data['source'] == 'rcsb':
+            create_args['pdb_id'] = request.data['pdb_id']
         else:
-            raise PermissionDenied
+            create_args['file'] = request.data['pdb_file']
+        
+        Trajectory.create(**create_args)
+        return Response(data=self.serializer_class(instance).data)
+        
 
     @action(['GET', 'POST', 'DELETE'], url_path='protein-model', detail=True)
     def protein_model(self, request, *args, **kwargs):  # pylint: disable=unused-argument

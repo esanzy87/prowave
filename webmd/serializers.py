@@ -9,6 +9,8 @@ class TrajectorySerializer(serializers.ModelSerializer):
     """
     WebmdWork Serializer
     """
+    models = serializers.ReadOnlyField()
+    chains = serializers.ReadOnlyField()
     simulations = serializers.ReadOnlyField()
 
     class Meta:

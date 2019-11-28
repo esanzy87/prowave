@@ -6,14 +6,21 @@ from rest_framework import serializers
 from prowave.models import UserInfo
 
 
-class UserSerializer(serializers.ModelSerializer):
+class ProfileSerializer(serializers.ModelSerializer):
     """
-    회원
+    사용자 정보
     """
-    name = serializers.ReadOnlyField()
-    email = serializers.ReadOnlyField()
-    is_active = serializers.ReadOnlyField()
-
     class Meta:
         model = UserInfo
+        fields = '__all__'
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """
+    사용자 (인증)
+    """
+    profile = ProfileSerializer()
+
+    class Meta:
+        model = User
         fields = '__all__'

@@ -16,6 +16,8 @@ services:
     image: nbcc/prowave-controller
     hostname: slurmctld
     extra_hosts:
+      - gpu67: 172.16.3.67
+      - gpu68: 172.16.3.68
       - gpu69:172.16.3.69
       - node67:172.16.1.67
     ports:

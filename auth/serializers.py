@@ -8,7 +8,7 @@ class UserSerializer(serializers.Serializer):
     """
     사용자 (인증)
     """
-    user_id = serializers.IntegerField(source='id')
+    id = serializers.IntegerField()
     name = serializers.CharField(source='first_name')
     email = serializers.EmailField()
     country = serializers.CharField(source='info.country')

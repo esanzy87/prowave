@@ -11,7 +11,7 @@ import tempfile
 import requests
 
 
-CONTROLLER_HOST = os.envrion.get('PROWAVE_CONTROLLER_HOST', 'slurmctld:8000')
+CONTROLLER_HOST = os.environ.get('PROWAVE_CONTROLLER_HOST', 'slurmctld:8000')
 
 if __name__ == '__main__':
     BASE_URL = 'http://%s/api/solvation-free-energy/works' % CONTROLLER_HOST

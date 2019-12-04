@@ -62,7 +62,7 @@ from .serializers import ProjectSerializer, TrajectorySerializer
 
 class TrajectoryViewSet(viewsets.ModelViewSet):
     """
-    webmd.viewsets.WebmdWorkViewset
+    webmd.viewsets.TrajectoryViewSet
     """
     queryset = Trajectory.objects
     serializer_class = TrajectorySerializer
@@ -72,6 +72,41 @@ class TrajectoryViewSet(viewsets.ModelViewSet):
             return self.queryset.none()
         return self.queryset.filter(owner=self.request.user)
 
+    @action(['POST'], url_path='cleanup', detail=True)
+    def cleanup(self, request, *args, **kwargs):
+        """
+        webmd.viewsets.TrajectoryViewSet.cleanup
+        """
+        trajectory = self.get_object()
+        try:
+            model_index = int(request.data.get('model', '0'))
+        except TypeError:
+            model_index = 0
+        chain_ids = request.data.get('chain_ids', [])
+        solvent_ions = request.data.get('solvent_ions', [])
+        ligand_name = request.data.get('ligand_name')
+        trajectory.cleanup(model_index, chain_ids, solvent_ions, ligand_name)
+        return self.retrieve(request, *args, **kwargs)
+
+    @action(['POST', 'DELETE'], url_path='protein-model', detail=True)
+    def protein_model(self, request, *args, **kwargs):
+        """
+        webmd.viewsets.TrajectoryViewSet.protein_model
+        """
+        trajectory = self.get_object()
+
+        if request.method == 'DELETE':
+            for target_file in ('model.pdb', 'leaprc', 'leap.log', 'model.inpcrd', 'model.prmtop', 'model_solv.pdb', 'slurm_job_id'):
+                if os.path.exists(os.path.join(trajectory.work_dir, target_file)):
+                    os.remove(os.path.join(trajectory.work_dir, target_file))
+            return self.retrieve(request, *args, **kwargs)
+
+        if request.method == 'POST':
+            cyx_residues = request.data.get('cyx_residues', [])
+            protonation_states = request.data.get('protonation_states', [])
+            trajectory.create_model(cyx_residues, protonation_states)
+            return Response(trajectory.prepare())
+        return self.retrieve(request, *args, **kwargs)
 
 class ProjectViewSet(viewsets.ModelViewSet):
     """
@@ -109,131 +144,16 @@ class ProjectViewSet(viewsets.ModelViewSet):
             cut=request.data.get('cut', 9.0),
             cation=request.data.get('cation', 'Na+'),
             anion=request.data.get('anion', 'Cl-'),
+            name='Trajectory A'
         )
 
         if request.data['source'] == 'rcsb':
             create_args['pdb_id'] = request.data['pdb_id']
         else:
             create_args['file'] = request.data['pdb_file']
-        
+
         Trajectory.create(**create_args)
         return Response(data=self.serializer_class(instance).data)
-        
-
-    @action(['GET', 'POST', 'DELETE'], url_path='protein-model', detail=True)
-    def protein_model(self, request, *args, **kwargs):  # pylint: disable=unused-argument
-        """
-        webmd.viewsets.ProjectViewSet.protein_model
-        """
-        project = self.get_object()
-        model_pdb_file = os.path.join(project.work_dir, 'model.pdb')
-        cleaned_pdb_file = os.path.join(project.work_dir, 'cleaned.pdb')
-
-        if request.method == 'POST':
-            try:
-                model_index = int(request.data.get('model', '0'))
-            except TypeError:
-                model_index = 0
-            chain_ids = request.data.get('chains', [])
-            solvent_ions = request.data.get('solvent_ions', [])
-            ligand_name = request.data.get('ligand_name', None)
-            project.protein_model.cleanup(
-                model_index=model_index,
-                chain_ids=chain_ids,
-                solvent_ions=solvent_ions,
-                ligand_name=ligand_name
-            )
-            assert os.path.exists(cleaned_pdb_file)
-
-        if request.method == 'DELETE':
-            if os.path.exists(model_pdb_file):
-                os.remove(model_pdb_file)
-                os.remove(os.path.join(project.work_dir, 'leaprc'))
-                os.remove(os.path.join(project.work_dir, 'leap.log'))
-                os.remove(os.path.join(project.work_dir, 'model.inpcrd'))
-                os.remove(os.path.join(project.work_dir, 'model.prmtop'))
-                os.remove(os.path.join(project.work_dir, 'model_solv.pdb'))
-                os.remove(os.path.join(project.work_dir, 'slurm_job_id'))
-            elif os.path.exists(cleaned_pdb_file):
-                os.remove(cleaned_pdb_file)
-            else:
-                pass
-
-        topo = project.protein_model.topology
-        if os.path.exists(model_pdb_file):
-            return Response({
-                'stage': 3,
-                'chains': topo.chains,
-                'sequence': topo.sequence,
-                'pdb': '{}{}'.format(project.protein_model.base_url, 'model.pdb')
-            })
-        elif os.path.exists(cleaned_pdb_file):
-            return Response({
-                'stage': 2,
-                'chains': topo.chains,
-                'nonStandards': topo.non_standards,
-                'disulfideBondCandidates': topo.disulfide_bond_candidates,
-                'protonationStates': topo.protonation_states,
-                'sequence': topo.sequence,
-                'pdb': '{}{}'.format(project.protein_model.base_url, 'cleaned.pdb'),
-            })
-        else:
-            base_url = project.protein_model.base_url
-            filename = project.protein_model.filename
-            return Response({
-                'stage': 1,
-                'models': range(len(topo.models)),
-                'chains': topo.chains,
-                'solventIons': topo.solvent_ions,
-                'sequence': topo.sequence,
-                'pdb': '{}/{}'.format(base_url, filename),
-            })
-
-    @action(['POST'], url_path='protein-model/run', detail=True)
-    def run_protein_modelling(self, request, *args, **kwargs):  # pylint: disable=unused-argument
-        """
-        webmd.viewsets.ProjectViewSet.run_protein_modelling
-        """
-        project = self.get_object()
-        cyx_residues = request.data.get('cyx_residues', [])
-        protonation_states = request.data.get('protonation_states', [])
-        project.protein_model.create_model(
-            cyx_residues=cyx_residues,
-            protonation_states=protonation_states
-        )
-        # submit job to work load manager
-        sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
-        cwd = os.getcwd()
-        try:
-            os.chdir('/home/nbcc')
-            cmd = [
-                sbatch_exe,
-                '--job-name', 'TLEAP',
-                '--partition', 'prowave_cpu',
-                os.path.join(settings.BASE_DIR, 'webmd/scripts/run_modelling.py'),
-                '%s' % project.owner_id,
-                '%s' % project.seq,
-            ]
-            output = subprocess.check_output(cmd)
-            job_id = output.decode().split()[-1]
-            try:
-                slurm_job_id = int(job_id)
-                with open(os.path.join(project.work_dir, 'slurm_job_id'), 'w') as f:
-                    f.write('%d' % slurm_job_id)
-                return Response({
-                    'run': True,
-                    'slurm_job_id': slurm_job_id,
-                    'project_id': project.id
-                })
-            except ValueError:
-                return Response({
-                    'run': False,
-                    'slurm_job_id': -1,
-                    'project_id': project.id
-                })
-        finally:
-            os.chdir(cwd)
-
 
 router = routers.DefaultRouter()
 router.register(r'projects', ProjectViewSet)

@@ -11,8 +11,10 @@ import tempfile
 import requests
 
 
+CONTROLLER_HOST = os.envrion.get('PROWAVE_CONTROLLER_HOST', 'slurmctld:8000')
+
 if __name__ == '__main__':
-    BASE_URL = 'http://172.16.0.30:8000/api/solvation-free-energy/works'
+    BASE_URL = 'http://%s/api/solvation-free-energy/works' % CONTROLLER_HOST
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument('work_id', type=int)
     PARSER.add_argument('mode', default='m', choices=['m', 't', 'a', 'x'])

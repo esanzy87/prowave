@@ -2,6 +2,7 @@
 Core Models
 """
 import os
+import subprocess
 import yaml
 from django.db import models, transaction
 from django.contrib.auth.models import User
@@ -127,8 +128,7 @@ class Work(models.Model):
         instance.save()
         return instance
 
-    def cleanup(self, model_index=0, chain_ids=tuple(), solvent_ions=tuple(),
-                ligand_name=None):
+    def cleanup(self, model_index, chain_ids, solvent_ions, ligand_name=None):
         """
         Work.cleanup
         """
@@ -152,7 +152,47 @@ class Work(models.Model):
         """
         Work.prepare
         """
-        pass
+        sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
+        cwd = os.getcwd()
+        try:
+            os.chdir('/home/nbcc')
+            cmd = [
+                sbatch_exe,
+                '--job-name', 'TLEAP',
+                '--partition', 'prowave_cpu',
+                os.path.join(settings.BASE_DIR, 'webmd/scripts/run_preparation.py'),
+                '%s' % self.project.owner_id,
+                '%s' % self.id,
+            ]
+            output = subprocess.check_output(cmd)
+            job_id = output.decode().split()[-1]
+            try:
+                slurm_job_id = int(job_id)
+                with open(os.path.join(self.work_dir, 'slurm_job_id'), 'w') as f:
+                    f.write('%d' % slurm_job_id)
+                return {
+                    'run': True,
+                    'slurm_job_id': slurm_job_id,
+                    'trajectory_id': self.id
+                }
+            except ValueError:
+                return {
+                    'run': False,
+                    'slurm_job_id': -1,
+                    'trajectory_id': self.id
+                }
+        finally:
+            os.chdir(cwd)
+
+    @property
+    def pdb(self):
+        """
+        Modelling 절차상 최종으로 생성된 pdb 파일
+        """
+        for pdb_file in ['model_solv.pdb', 'model.pdb', 'cleaned.pdb']:
+            if os.path.exists(os.path.join(self.work_dir, pdb_file)):
+                return pdb_file
+        return self.filename
 
     @property
     def work_dir(self):
@@ -161,7 +201,6 @@ class Work(models.Model):
         """
         basepath = '%d/trajectories/%d' % (self.owner.id, self.id)
         return os.path.join(settings.WEBMD_USERDATA_DIR, basepath)
-
     
     def get_topology(self, filename):
         with open(os.path.join(self.work_dir, filename), 'r') as stream:
@@ -189,15 +228,13 @@ class Work(models.Model):
             return []
         topo = self.get_topology('cleaned.pdb')
         return topo.non_standards
-    
+
     @property
     def disulfide_bond_candidates(self):
         if not os.path.exists(os.path.join(self.work_dir, 'cleaned.pdb')):
             return []
         topo = self.get_topology('cleaned.pdb')
         return topo.disulfide_bond_candidates
-
-    
 
     @property
     def protonation_states(self):

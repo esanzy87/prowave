@@ -76,7 +76,7 @@ class TrajectoryViewSet(viewsets.ModelViewSet):
         """
         trajectory = self.get_object()
         try:
-            model_index = int(request.data.get('model', '0'))
+            model_index = int(request.data.get('model_index', '0'))
         except TypeError:
             model_index = 0
         chain_ids = request.data.get('chain_ids', [])

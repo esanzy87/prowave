@@ -113,8 +113,7 @@ class Work(models.Model):
     cation = models.CharField(max_length=5, default='Na+')
     anion = models.CharField(max_length=5, default='Cl-')
     ref_temp = models.IntegerField(default=300)
-    project = models.ForeignKey(Project, null=True,
-                                on_delete=models.SET_NULL)
+    project = models.ForeignKey(Project, null=True, on_delete=models.SET_NULL)
     is_deleted = models.BooleanField(default=False)
 
     @classmethod
@@ -168,47 +167,45 @@ class Work(models.Model):
         with open(os.path.join(self.work_dir, 'model.pdb'), 'w') as stream:
             stream.write(topo.deserialize())
 
+    @working_directory('/home/nbcc')
     def prepare(self):
         """
         Trajectory.prepare
         """
         sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
-        cwd = os.getcwd()
+        cmd = [
+            sbatch_exe,
+            '--job-name', 'TLEAP',
+            '--partition', 'prowave_cpu',
+            os.path.join(settings.BASE_DIR, 'webmd/scripts/run_preparation.py'),
+            '%s' % self.project.owner_id,
+            '%s' % self.id,
+        ]
+
         try:
-            os.chdir('/home/nbcc')
-            cmd = [
-                sbatch_exe,
-                '--job-name', 'TLEAP',
-                '--partition', 'webmd_cpu',
-                os.path.join(settings.BASE_DIR, 'webmd/scripts/run_preparation.py'),
-                '%s' % self.project.owner_id,
-                '%s' % self.id,
-            ]
+            output = subprocess.check_output(cmd)
+            job_id = output.decode().split()[-1]
+            slurm_job_id = int(job_id)
+            with open(os.path.join(self.work_dir, 'slurm_job_id'), 'w') as f:
+                f.write('%d' % slurm_job_id)
 
-            try:
-                output = subprocess.check_output(cmd)
-                job_id = output.decode().split()[-1]
-                slurm_job_id = int(job_id)
-                with open(os.path.join(self.work_dir, 'slurm_job_id'), 'w') as f:
-                    f.write('%d' % slurm_job_id)
-
-                simulations_template_path = os.path.join(settings.BASE_DIR, '_artifacts_/simulations_templates/default.yml')
-                simulations_path = os.path.join(self.work_dir, 'simulations.yml')
-                shutil.copy2(simulations_template_path, simulations_path)
-                return {
-                    'run': True,
-                    'slurm_job_id': slurm_job_id,
-                    'trajectory_id': self.id
-                }
-            except ValueError:
-                return {
-                    'run': False,
-                    'slurm_job_id': -1,
-                    'trajectory_id': self.id
-                }
-
-        finally:
-            os.chdir(cwd)
+            simulations_template_path = os.path.join(
+                settings.BASE_DIR,
+                '_artifacts_/simulations_templates/default.yml'
+            )
+            simulations_path = os.path.join(self.work_dir, 'simulations.yml')
+            shutil.copy2(simulations_template_path, simulations_path)
+            return {
+                'run': True,
+                'slurm_job_id': slurm_job_id,
+                'trajectory_id': self.id
+            }
+        except ValueError:
+            return {
+                'run': False,
+                'slurm_job_id': -1,
+                'trajectory_id': self.id
+            }
 
     @working_directory('/home/nbcc')
     def run_simulation(self, method, index):
@@ -315,33 +312,37 @@ class Work(models.Model):
         with open(simulations_file, 'r') as stream:
             sim = yaml.load(stream, Loader=yaml.Loader)
 
-        base_url = '/api/webmd/users/%d/files/trajectories/%d' \
-            % (self.owner.id, self.id)
-
         previous = dict()
-        for stage, items in sim.items():
-            for j, item in enumerate(items):
-                if stage in ('min', 'eq'):
-                    base_path = '%s%d.pdb' % (stage, j+1)
+        for method, items in sim.items():
+            for i, item in enumerate(items):
+                if method in ('min', 'eq'):
+                    base_path = '%s%d.pdb' % (method, i+1)
                 else:
-                    base_path = '%d/%s.pdb' % (j+1, stage)
-                pdb_path = os.path.join(self.work_dir, stage, base_path)
+                    base_path = '%d/%s.pdb' % (i+1, method)
+                pdb_path = os.path.join(self.work_dir, method, base_path)
 
                 item['done'] = os.path.exists(pdb_path)
-                if not item['done']:
-                    if not previous:
-                        item['runnable'] = True
-                    else:
-                        item['runnable'] = previous['done']
-                        previous['deletable'] = item['runnable']
-                    item['deletable'] = True
-                else:
-                    item['pdb'] = '%s/%s/%s' % (base_url, stage, base_path)
-                    if stage == 'md':
-                        item['dcd'] = '%s/%s/%d/%s.dcd' \
-                            % (base_url, stage, j+1, stage)
-                    item['deletable'] = False
-                previous = item
+                item['deletable'] = True
+                item['runnable'] = False
+                if item['done']:
+                    if previous:
+                        key, idx, _ = previous.values()
+                        sim[key][idx]['deletable'] = False
+                elif not previous or previous['done']:
+                    item['runnable'] = True
+
+                base_url = '/api/webmd/users/%d/files/trajectories/%d' \
+                    % (self.owner.id, self.id)
+                item['pdb'] = '%s/%s/%s' % (base_url, method, base_path)
+                if method == 'md':
+                    item['dcd'] = '%s/%s/%d/%s.dcd' \
+                        % (base_url, method, i+1, method)
+
+                previous = {
+                    'method': method,
+                    'index': i,
+                    'done': item['done'],
+                }
         return sim
 
 

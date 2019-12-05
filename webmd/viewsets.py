@@ -46,8 +46,6 @@ webmd.viewsets
 
 """
 import os
-import subprocess
-from django.conf import settings
 from django.db import transaction
 from rest_framework import viewsets, routers
 from rest_framework.decorators import action
@@ -55,7 +53,6 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.parsers import FormParser, MultiPartParser
 
-from prowave.utils import get_rcsb_pdb, save_uploaded_pdb
 from .models import Project, Work as Trajectory
 from .serializers import ProjectSerializer, TrajectorySerializer
 
@@ -96,9 +93,14 @@ class TrajectoryViewSet(viewsets.ModelViewSet):
         trajectory = self.get_object()
 
         if request.method == 'DELETE':
-            for target_file in ('model.pdb', 'leaprc', 'leap.log', 'model.inpcrd', 'model.prmtop', 'model_solv.pdb', 'slurm_job_id'):
-                if os.path.exists(os.path.join(trajectory.work_dir, target_file)):
-                    os.remove(os.path.join(trajectory.work_dir, target_file))
+            files = (
+                'model.pdb', 'leaprc', 'leap.log', 'model.inpcrd',
+                'model.prmtop', 'model_solv.pdb', 'slurm_job_id'
+            )
+            for target_file in files:
+                file_path = os.path.join(trajectory.work_dir, target_file)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
             return self.retrieve(request, *args, **kwargs)
 
         if request.method == 'POST':
@@ -107,6 +109,17 @@ class TrajectoryViewSet(viewsets.ModelViewSet):
             trajectory.create_model(cyx_residues, protonation_states)
             return Response(trajectory.prepare())
         return self.retrieve(request, *args, **kwargs)
+
+    @action(['POST'], url_path='run', detail=True)
+    def run_simulation(self, request, pk=None):
+        """
+        webmd.viewsets.TrajectoryViewSet.run_simulation
+        """
+        trajectory = self.get_object()
+        method = request.data.get('method')
+        index = str(request.data.get('index'))
+        return Response(trajectory.run_simulation(method, index))
+
 
 class ProjectViewSet(viewsets.ModelViewSet):
     """

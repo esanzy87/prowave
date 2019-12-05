@@ -3,12 +3,31 @@ Core Models
 """
 import os
 import subprocess
+from functools import wraps
+
 import yaml
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.conf import settings
 from prowave.utils import get_rcsb_pdb, save_uploaded_pdb
 from prowave.utils.pdbutil import Topology
+
+
+def working_directory(directory):
+    """
+    Decorated 함수를 지정된 working directory에서 수행하도록 하는 데코레이터
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            cwd = os.getcwd()
+            try:
+                os.chdir(directory)
+                return func(*args, **kwargs)
+            finally:
+                os.chdir(cwd)
+        return wrapper
+    return decorator
 
 
 # Create your models here.
@@ -69,7 +88,7 @@ class Project(models.Model):
 
 class Work(models.Model):
     """
-    Work
+    Trajectory
     """
     STATUS_CHOICES = (
         'NO DATA',
@@ -102,7 +121,7 @@ class Work(models.Model):
     def create(cls, owner, source, project, solvent_model, buffer_size, cut,
                **kwargs):
         """
-        Work.create
+        Trajectory.create
         """
         uploaded = source == 'upload'
         instance = cls.objects.create(
@@ -130,7 +149,7 @@ class Work(models.Model):
 
     def cleanup(self, model_index, chain_ids, solvent_ions, ligand_name=None):
         """
-        Work.cleanup
+        Trajectory.cleanup
         """
         with open(os.path.join(self.work_dir, self.filename), 'r') as stream:
             topo = Topology(stream)
@@ -140,7 +159,7 @@ class Work(models.Model):
 
     def create_model(self, cyx_residues=None, protonation_states=None):
         """
-        Work.create_model
+        Trajectory.create_model
         """
         with open(os.path.join(self.work_dir, 'cleaned.pdb'), 'r') as stream:
             topo = Topology(stream)
@@ -150,7 +169,7 @@ class Work(models.Model):
 
     def prepare(self):
         """
-        Work.prepare
+        Trajectory.prepare
         """
         sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
         cwd = os.getcwd()
@@ -159,7 +178,7 @@ class Work(models.Model):
             cmd = [
                 sbatch_exe,
                 '--job-name', 'TLEAP',
-                '--partition', 'prowave_cpu',
+                '--partition', 'webmd_cpu',
                 os.path.join(settings.BASE_DIR, 'webmd/scripts/run_preparation.py'),
                 '%s' % self.project.owner_id,
                 '%s' % self.id,
@@ -183,6 +202,40 @@ class Work(models.Model):
                 }
         finally:
             os.chdir(cwd)
+
+    @working_directory('/home/nbcc')
+    def run_simulation(self, method, index):
+        """
+        Trajectory.run_simulation
+        """
+        sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
+        cmd = [
+            sbatch_exe,
+            '--job-name', method,
+            '--partition', 'prowave',
+            os.path.join(settings.BASE_DIR, 'webmd/scripts/run_simulation.py'),
+            '%s' % self.project.owner.id,
+            '%s' % self.id,
+            method,
+            index
+        ]
+        output = subprocess.check_output(cmd)
+        job_id = output.decode().split()[-1]
+        try:
+            slurm_job_id = int(job_id)
+            with open(os.path.join(self.work_dir, 'slurm_job_id'), 'w') as f:
+                f.write('%d' % slurm_job_id)
+            return {
+                'run': True,
+                'slurm_job_id': slurm_job_id,
+                'trajectory_id': self.id
+            }
+        except ValueError:
+            return {
+                'run': False,
+                'slurm_job_id': -1,
+                'trajectory_id': self.id
+            }
 
     @property
     def pdb(self):

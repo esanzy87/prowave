@@ -71,7 +71,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response({
             'success': True,
-            'created_user': self.serializer_class(instance),
+            'created_user': self.serializer_class(instance).data,
         }, status=status.HTTP_201_CREATED)
 
     def list(self, request, *args, **kwargs):

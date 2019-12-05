@@ -11,8 +11,8 @@ import requests
 import yaml
 
 
-PROWAVE_API_HOST = os.environ.get('PROWAVE_API_HOST', 'http://172.16.0.30:8000')
-BASE_URL = '{host}/api/webmd/users'.format(host=PROWAVE_API_HOST)
+PROWAVE_API_HOST = os.environ.get('PROWAVE_API_HOST', 'http://slurmctld:8000')
+BASE_URL = 'http://{host}/api/webmd/users'.format(host=PROWAVE_API_HOST)
 
 
 def download_file(url):

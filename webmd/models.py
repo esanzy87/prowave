@@ -172,12 +172,12 @@ class Work(models.Model):
         """
         Trajectory.prepare
         """
-        srun_exe = os.path.join(settings.SLURM_HOME, 'bin/srun')
+        sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
         cwd = os.getcwd()
         try:
             os.chdir('/home/nbcc')
             cmd = [
-                srun_exe,
+                sbatch_exe,
                 '--job-name', 'TLEAP',
                 '--partition', 'webmd_cpu',
                 os.path.join(settings.BASE_DIR, 'webmd/scripts/run_preparation.py'),

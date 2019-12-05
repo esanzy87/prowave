@@ -11,7 +11,7 @@ import requests
 import yaml
 
 
-PROWAVE_API_HOST = os.environ.get('PROWAVE_API_HOST', 'http://slurmctld:8000')
+PROWAVE_API_HOST = os.environ.get('PROWAVE_API_HOST', 'slurmctld:8000')
 BASE_URL = 'http://{host}/api/webmd/users'.format(host=PROWAVE_API_HOST)
 
 

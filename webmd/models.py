@@ -2,6 +2,7 @@
 Core Models
 """
 import os
+import shutil
 import subprocess
 from functools import wraps
 
@@ -171,35 +172,39 @@ class Work(models.Model):
         """
         Trajectory.prepare
         """
-        sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
+        srun_exe = os.path.join(settings.SLURM_HOME, 'bin/srun')
         cwd = os.getcwd()
         try:
             os.chdir('/home/nbcc')
             cmd = [
-                sbatch_exe,
+                srun_exe,
                 '--job-name', 'TLEAP',
                 '--partition', 'webmd_cpu',
                 os.path.join(settings.BASE_DIR, 'webmd/scripts/run_preparation.py'),
                 '%s' % self.project.owner_id,
                 '%s' % self.id,
             ]
-            output = subprocess.check_output(cmd)
-            job_id = output.decode().split()[-1]
-            try:
-                slurm_job_id = int(job_id)
-                with open(os.path.join(self.work_dir, 'slurm_job_id'), 'w') as f:
-                    f.write('%d' % slurm_job_id)
-                return {
-                    'run': True,
-                    'slurm_job_id': slurm_job_id,
-                    'trajectory_id': self.id
-                }
-            except ValueError:
-                return {
-                    'run': False,
-                    'slurm_job_id': -1,
-                    'trajectory_id': self.id
-                }
+            subprocess.check_call(cmd)
+            # output = subprocess.check_output(cmd)
+            # job_id = output.decode().split()[-1]
+            # try:
+            #     slurm_job_id = int(job_id)
+            #     with open(os.path.join(self.work_dir, 'slurm_job_id'), 'w') as f:
+            #         f.write('%d' % slurm_job_id)
+            #     return {
+            #         'run': True,
+            #         'slurm_job_id': slurm_job_id,
+            #         'trajectory_id': self.id
+            #     }
+            # except ValueError:
+            #     return {
+            #         'run': False,
+            #         'slurm_job_id': -1,
+            #         'trajectory_id': self.id
+            #     }
+            simulations_template_path = os.path.join(settings.BASE_DIR, '_artifacts_/simulations_templates/default.yml')
+            simulations_path = os.path.join(self.work_dir, 'simulations.yml')
+            shutil.copy2(simulations_template_path, simulations_path)
         finally:
             os.chdir(cwd)
 

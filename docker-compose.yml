@@ -25,12 +25,19 @@ services:
       - 6379:6379
     volumes:
       - .:/home/nbcc/www/prowave
-      - ../prowave_ui:/home/nbcc/www/prowave_ui
-      - ../prowave_compute:/home/nbcc/www/prowave_compute
       - ./_artifacts_/etc_slurm:/etc/slurm
       - ./data:/data
     environment:
       - PROWAVE_DB_HOST=db
+  ui:
+    depends_on:
+      - db
+      - controller
+    build: ../prowave_ui
+    image: nbcc/prowave-ui
+    hostname: ui
+    ports:
+      - 3000:3000
 
 volumes:
   pgdata:

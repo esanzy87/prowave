@@ -46,6 +46,7 @@ webmd.viewsets
 
 """
 import os
+import yaml
 from django.db import transaction
 from rest_framework import viewsets, routers
 from rest_framework.decorators import action
@@ -109,6 +110,49 @@ class TrajectoryViewSet(viewsets.ModelViewSet):
             trajectory.create_model(cyx_residues, protonation_states)
             return Response(trajectory.prepare())
         return self.retrieve(request, *args, **kwargs)
+
+    @action(['GET', 'POST', 'PUT', 'DELETE'], url_path='simulations', detail=True)
+    def simulations(self, request, pk=None):
+        """
+        webmd.viewsets.TrajectoryViewSet.simulations
+        """
+        trajectory = self.get_object()
+        simulations_file_path = os.path.join(trajectory.work_dir, 'simulations.yml')
+
+        if request.method == 'POST':
+            method = request.data.get('method')
+            index = request.data.get('index')
+            params = request.data.get('params')
+            simulations = yaml.load(simulations_file_path, Loader=yaml.Loader)
+
+            params['reference'] = '{method}/{method}{index}.npz'.format(method=method, index=index)
+            params['state_file'] = '{method}/{method}{index}.npz'.format(method=method, index=index+1)
+            params['pdb_file'] = '{method}/{method}{index}.pdb'.format(method=method, index=index+1)
+
+            if method in ('eq', 'md'):
+                params['out_file'] = '{method}/{method}{index}.out'.format(method=method, index=index+1)
+
+            if method == 'md':
+                params['traj_file'] = '{method}/{method}{index}.dcd'.format(method=method, index=index+1)
+
+            simulations[method].append(params)
+
+            with open(simulations_file_path, 'w') as stream:
+                stream.write(yaml.dump(simulations, Dumper=yaml.Dumper))
+        elif request.method == 'PUT':
+            method = request.data.get('method')
+            index = request.data.get('index')
+            params = request.data.get('params')
+            simulations = yaml.load(simulations_file_path, Loader=yaml.Loader)
+            for key, value in params.items():
+                simulations[method][index][key] = value
+
+            with open(simulations_file_path, 'w') as stream:
+                stream.write(yaml.dump(simulations, Dumper=yaml.Dumper))
+        elif request.method == 'DELETE':
+            pass
+
+        return Response(trajectory.simulations)
 
     @action(['POST'], url_path='run', detail=True)
     def run_simulation(self, request, pk=None):

@@ -227,8 +227,9 @@ class Work(models.Model):
         job_id = output.decode().split()[-1]
         try:
             slurm_job_id = int(job_id)
-            with open(os.path.join(self.work_dir, 'slurm_job_id'), 'w') as f:
-                f.write('%d' % slurm_job_id)
+            slurm_job_id_file = os.path.join(self.work_dir, 'slurm_job_id')
+            with open(slurm_job_id_file, 'w') as stream:
+                stream.write('%d' % slurm_job_id)
             return {
                 'run': True,
                 'slurm_job_id': slurm_job_id,
@@ -240,6 +241,27 @@ class Work(models.Model):
                 'slurm_job_id': -1,
                 'trajectory_id': self.id
             }
+
+    @property
+    def slurm_job_id(self):
+        """
+        SLURM job id
+        """
+        slurm_job_id_file = os.path.join(self.work_dir, 'slurm_job_id')
+        try:
+            with open(slurm_job_id_file, 'r') as stream:
+                return int(stream.read())
+        except (ValueError, FileNotFoundError):
+            return -1
+
+    @property
+    def running(self):
+        squeue_lines = subprocess.check_output(['squeue', '-h']).decode().split('\n')
+        for line in squeue_lines:
+            job_status = line.strip().split()
+            if job_status and self.slurm_job_id == int(job_status[0]):
+                return True
+        return False
 
     @property
     def pdb(self):
@@ -258,7 +280,7 @@ class Work(models.Model):
         """
         basepath = '%d/trajectories/%d' % (self.owner.id, self.id)
         return os.path.join(settings.WEBMD_USERDATA_DIR, basepath)
-    
+ 
     def get_topology(self, filename):
         with open(os.path.join(self.work_dir, filename), 'r') as stream:
             topo = Topology(stream)
@@ -301,6 +323,10 @@ class Work(models.Model):
         return topo.protonation_states
 
     @property
+    def is_modelled(self):
+        return os.path.exists(os.path.join(self.work_dir, 'model_solv.pdb'))
+
+    @property
     def simulations(self):
         """
         simulations
@@ -315,28 +341,25 @@ class Work(models.Model):
         previous = dict()
         for method, items in sim.items():
             for i, item in enumerate(items):
-                if method in ('min', 'eq'):
-                    base_path = '%s%d.pdb' % (method, i+1)
-                else:
-                    base_path = '%d/%s.pdb' % (i+1, method)
-                pdb_path = os.path.join(self.work_dir, method, base_path)
-
+                pdb_path = os.path.join(self.work_dir, '%s.pdb' % item['basename'])
                 item['done'] = os.path.exists(pdb_path)
                 item['deletable'] = True
                 item['runnable'] = False
+                item['running'] = False
                 if item['done']:
                     if previous:
                         key, idx, _ = previous.values()
                         sim[key][idx]['deletable'] = False
                 elif not previous or previous['done']:
-                    item['runnable'] = True
+                    item['runnable'] = not self.running
+                    item['running'] = self.running
 
                 base_url = '/api/webmd/users/%d/files/trajectories/%d' \
                     % (self.owner.id, self.id)
-                item['pdb'] = '%s/%s/%s' % (base_url, method, base_path)
+                item['pdb'] = '%s/%s.pdb' % (base_url, item['basename'])
                 if method == 'md':
-                    item['dcd'] = '%s/%s/%d/%s.dcd' \
-                        % (base_url, method, i+1, method)
+                    item['dcd'] = '%s/%s.dcd' \
+                        % (base_url, item['basename'])
 
                 previous = {
                     'method': method,

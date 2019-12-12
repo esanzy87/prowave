@@ -3,13 +3,11 @@ min:
     restraint_weight: 10.0
     cutoff: 10.0
     reference: model.inpcrd
-    state_file: min/min1.npz
-    pdb_file: min/min1.pdb
+    basename: min/min1
   - maxcyc: 1500
     cutoff: 10.0
     reference: min/min1.npz
-    state_file: min/min2.npz
-    pdb_file: min/min2.pdb
+    basename: min/min2
 eq:
   - nstlim: 10000
     dt: 0.002
@@ -19,18 +17,14 @@ eq:
     ntb: 1
     cutoff: 10.0
     reference: min/min2.npz
-    state_file: eq/eq1.npz
-    out_file: eq/eq1.out
-    pdb_file: eq/eq1.pdb
+    basename: eq/eq1
   - nstlim: 100000
     dt: 0.002
     temp0: 300.0
     ntb: 2
     cutoff: 10.0
     reference: eq/eq1.npz
-    state_file: eq/eq2.npz
-    out_file: eq/eq2.out
-    pdb_file: eq/eq2.pdb
+    basename: eq/eq2
 md:
   - nstlim: 500000
     dt: 0.002
@@ -38,17 +32,11 @@ md:
     ntb: 1
     cutoff: 10.0
     reference: eq/eq2.npz
-    state_file: md/1/md.npz
-    out_file: md/1/md.out
-    traj_file: md/1/md.dcd
-    pdb_file: md/1/md.pdb
+    basename: md/md1
   - nstlim: 500000
     dt: 0.002
     temp0: 300.0
     ntb: 1
     cutoff: 10.0
     reference: md/1/md.npz
-    state_file: md/2/md.npz
-    out_file: md/2/md.out
-    traj_file: md/2/md.dcd
-    pdb_file: md/2/md.pdb
+    basename: md/md2

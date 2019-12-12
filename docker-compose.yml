@@ -29,16 +29,6 @@ services:
       - ./data:/data
     environment:
       - PROWAVE_DB_HOST=db
-  ui:
-    depends_on:
-      - db
-      - controller
-    build: ../prowave_ui
-    image: nbcc/prowave-ui
-    hostname: ui
-    ports:
-      - 3000:3000
-
 volumes:
   pgdata:
     external: true

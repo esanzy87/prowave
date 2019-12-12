@@ -16,7 +16,7 @@ class TrajectorySerializer(serializers.ModelSerializer):
     non_standards = serializers.ReadOnlyField()
     disulfide_bond_candidates = serializers.ReadOnlyField()
     protonation_states = serializers.ReadOnlyField()
-    simulations = serializers.ReadOnlyField()
+    is_modelled = serializers.ReadOnlyField()
 
     class Meta:
         """

@@ -76,13 +76,19 @@ def main():
         simulation = simulations[args.method][args.index]
         download_file("{base_url}/model.prmtop".format(base_url=base_url))
 
-        assert 'state_file' in simulation
-        assert 'pdb_file' in simulation
         assert 'reference' in simulation
+        assert 'basename' in simulation
+        basename = simulation['basename']
+        state_file = '%s.npz' % basename
+        out_file = '%s.out' % basename
+        pdb_file = '%s.pdb' % basename
+        traj_file = '%s.dcd' % basename
+
         download_file("{base_url}/{reference}".format(
             base_url=base_url,
             reference=simulation['reference'])
         )
+
         cmd = [
             '/home/nbcc/prowave_compute/simulation.py',
             args.method,
@@ -94,29 +100,26 @@ def main():
             cmd.extend([
                 str(simulation['maxcyc']),
                 '-t', 'model.prmtop',
-                '-s', simulation['state_file'].split('/')[-1],
+                '-s', state_file.split('/')[-1],
             ])
 
         elif args.method == 'eq':
-            assert 'out_file' in simulation
             assert 'nstlim' in simulation
             cmd.extend([
                 str(simulation['nstlim']),
                 '-t', 'model.prmtop',
-                '-s', simulation['state_file'].split('/')[-1],
-                '-o', simulation['out_file'].split('/')[-1],
+                '-s', state_file.split('/')[-1],
+                '-o', out_file.split('/')[-1],
             ])
 
         else:
-            assert 'out_file' in simulation
             assert 'nstlim' in simulation
-            assert 'traj_file' in simulation
             cmd.extend([
                 str(simulation['nstlim']),
                 '-t', 'model.prmtop',
-                '-s', simulation['state_file'].split('/')[-1],
-                '-o', simulation['out_file'].split('/')[-1],
-                '-T', simulation['traj_file'].split('/')[-1],
+                '-s', state_file.split('/')[-1],
+                '-o', out_file.split('/')[-1],
+                '-T', traj_file.split('/')[-1],
             ])
 
         simulation_params = (
@@ -129,11 +132,11 @@ def main():
 
         subprocess.check_call(cmd)
 
-        for key in ('state_file', 'pdb_file', 'out_file', 'traj_file'):
-            if key in simulation:
+        for file_to_upload in (state_file, pdb_file, out_file, traj_file):
+            if os.path.exists(file_to_upload.split('/')[-1]):
                 upload_file("{base_url}/{file}".format(
                     base_url=base_url,
-                    file=simulation[key]
+                    file=file_to_upload
                 ))
 
     # End of execution

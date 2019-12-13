@@ -169,7 +169,7 @@ REST_FRAMEWORK = {
 # in-house settings
 PDB_SOURCES_DIR = os.environ.get('PDB_SOURCES_DIR', '/data/pdb_sources')
 PROWAVE_DATA_DIR = os.environ.get('PROWAVE_DATA_DIR', '/data/prowave_data')
-WEBMD_USERDATA_DIR = os.environ.get('WEBMD_USERDATA_DIR', '/data/webmd_userdata')
+WEBMD_DATA_DIR = os.environ.get('WEBMD_DATA_DIR', '/data/webmd_data')
 SLURM_HOME = os.environ.get('SLURM_HOME', '/opt/apps/slurm')
 AMBERHOME = os.environ.get('AMBERHOME', '/home/nbcc/anaconda3/envs/ambertools')
 OPENMM_HOME = os.environ.get('OPENMM_HOME', '/home/nbcc/anaconda3/envs/prowave_compute')

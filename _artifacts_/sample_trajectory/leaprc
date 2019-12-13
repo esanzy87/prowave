@@ -1,0 +1,8 @@
+source /home/nbcc/anaconda3/envs/ambertools/dat/leap/cmd/leaprc.protein.ff14SB
+source /home/nbcc/anaconda3/envs/ambertools/dat/leap/cmd/leaprc.water.tip3p
+prot = loadpdb model.pdb
+solvateBox prot TIP3PBOX 10.0 iso
+addIons prot Na+ 0
+addIons prot Cl- 0
+saveAmberParm prot model.prmtop model.inpcrd
+quit

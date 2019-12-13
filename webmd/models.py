@@ -118,8 +118,7 @@ class Work(models.Model):
 
     @classmethod
     @transaction.atomic()
-    def create(cls, owner, source, project, solvent_model, buffer_size, cut,
-               **kwargs):
+    def create(cls, owner, source, project, **kwargs):
         """
         Trajectory.create
         """
@@ -128,22 +127,24 @@ class Work(models.Model):
             owner=owner,
             project=project,
             uploaded=uploaded,
-            solvent_model=solvent_model,
-            buffer_size=buffer_size,
-            cut=cut
+            solvent_model=kwargs.get('solvent_model', 'TIP3PBOX'),
+            buffer_size=kwargs.get('buffer_size', 10.0),
+            cut=kwargs.get('cut', 9.0)
         )
+
         os.makedirs(instance.work_dir, exist_ok=True)
         if source == 'rcsb':
             pdb_id = kwargs.get('pdb_id')
-            filename = '%s.pdb' % pdb_id
             get_rcsb_pdb(pdb_id, instance.work_dir)
+            instance.filename = '%s.pdb' % pdb_id
         else:
-            file = kwargs.get('file')
-            filename = file.name
-            save_uploaded_pdb(file, instance.work_dir)
-        instance.filename = filename
+            file_obj = kwargs.get('file')
+            save_uploaded_pdb(file_obj, instance.work_dir)
+            instance.filename = file_obj.name
+
         if 'name' in kwargs:
             instance.name = kwargs.get('name')
+
         instance.save()
         return instance
 
@@ -278,8 +279,7 @@ class Work(models.Model):
         """
         work_dir
         """
-        basepath = '%d/trajectories/%d' % (self.owner.id, self.id)
-        return os.path.join(settings.WEBMD_USERDATA_DIR, basepath)
+        return os.path.join(settings.WEBMD_DATA_DIR, '%d' % self.id)
  
     def get_topology(self, filename):
         with open(os.path.join(self.work_dir, filename), 'r') as stream:
@@ -354,8 +354,7 @@ class Work(models.Model):
                     item['runnable'] = not self.running
                     item['running'] = self.running
 
-                base_url = '/api/webmd/users/%d/files/trajectories/%d' \
-                    % (self.owner.id, self.id)
+                base_url = '/api/webmd/files/%d' % self.id
                 item['pdb'] = '%s/%s.pdb' % (base_url, item['basename'])
                 if method == 'md':
                     item['dcd'] = '%s/%s.dcd' \

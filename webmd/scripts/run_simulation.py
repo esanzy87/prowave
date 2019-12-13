@@ -7,142 +7,146 @@ import os
 import shutil
 import subprocess
 import tempfile
+from functools import wraps
+
 import requests
 import yaml
 
 
 PROWAVE_API_HOST = os.environ.get('PROWAVE_API_HOST', 'slurmctld:8000')
-BASE_URL = 'http://{host}/api/webmd/users'.format(host=PROWAVE_API_HOST)
 
 
-def download_file(url):
+def temp_directory(func):
+    """
+    Decorated 함수를 temporary directory에서 수행하도록 하는 데코레이터
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        tempdir = tempfile.mkdtemp()
+        cwd = os.getcwd()
+        try:
+            os.chdir(tempdir)
+            return func(*args, **kwargs)
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(tempdir)
+    return wrapper
+
+
+def download_file(base_url, file_path):
     """
     downoload file
     """
-    get_response = requests.get(url)
-    if get_response.status_code == 200:
-        with open(url.split('/')[-1], 'wb+') as stream:
-            stream.write(get_response.content)
-            return get_response.content
-    return None
+    get_response = requests.get('%s/%s' % (base_url, file_path))
+    assert get_response.status_code == 200
+
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, 'wb+') as stream:
+        stream.write(get_response.content)
+        return get_response.content
 
 
-def upload_file(url):
+def upload_file(base_url, file_path):
     """
     upload file
     """
-    file_to_upload = url.split('/')[-1]
-    with open(file_to_upload, 'rb') as stream:
+    with open(file_path, 'rb') as stream:
         post_response = requests.post(
-            url,
-            data={'file': file_to_upload},
+            '%s/%s' % (base_url, file_path),
+            data={'file': file_path},
             files={'file': stream}
         )
         assert post_response.status_code == 201
 
 
+@temp_directory
 def main():
     """
     main
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('user_id', type=int)
     parser.add_argument('trajectory_id', type=int)
     parser.add_argument('method', choices=['min', 'eq', 'md'])
     parser.add_argument('index', type=int)
     args = parser.parse_args()
 
-    base_url = '{base}/{user_id}/files/trajectories/{trajectory_id}'.format(
-        base=BASE_URL,
-        user_id=args.user_id,
+    base_url = 'http://{host}/api/webmd/files/{trajectory_id}'.format(
+        host=PROWAVE_API_HOST,
         trajectory_id=args.trajectory_id
     )
 
-    tempdir = tempfile.mkdtemp()
-    cwd = os.getcwd()
-    try:
-        os.chdir(tempdir)
-        simulations_yml_get_url = "{base_url}/simulations.yml".format(
-            base_url=base_url
-        )
-        download_file(simulations_yml_get_url)
-        assert os.path.exists('simulations.yml')
+    download_file(base_url, 'simulations.yml')
+    assert os.path.exists('simulations.yml')
 
-        with open('simulations.yml', 'r') as stream:
-            simulations = yaml.load(stream)
+    with open('simulations.yml', 'r') as stream:
+        simulations = yaml.load(stream, Loader=yaml.Loader)
 
-        assert args.method in simulations
-        assert len(simulations[args.method]) > args.index
-        simulation = simulations[args.method][args.index]
-        download_file("{base_url}/model.prmtop".format(base_url=base_url))
+    assert args.method in simulations
+    assert len(simulations[args.method]) > args.index
+    simulation = simulations[args.method][args.index]
+    download_file(base_url, 'model.prmtop')
 
-        assert 'reference' in simulation
-        assert 'basename' in simulation
-        basename = simulation['basename']
-        state_file = '%s.npz' % basename
-        out_file = '%s.out' % basename
-        pdb_file = '%s.pdb' % basename
-        traj_file = '%s.dcd' % basename
+    assert 'reference' in simulation
+    assert 'basename' in simulation
+    basename = simulation['basename']
+    state_file = '%s.npz' % basename
+    out_file = '%s.out' % basename
+    pdb_file = '%s.pdb' % basename
+    traj_file = '%s.dcd' % basename
 
-        download_file("{base_url}/{reference}".format(
-            base_url=base_url,
-            reference=simulation['reference'])
-        )
+    download_file(base_url, simulation['reference'])
 
-        cmd = [
-            '/home/nbcc/prowave_compute/simulation.py',
-            args.method,
-            simulation['reference'].split('/')[-1]
-        ]
+    cmd = [
+        '/home/nbcc/prowave_compute/simulation.py',
+        args.method,
+        simulation['reference'].split('/')[-1]
+    ]
 
-        if args.method == 'min':
-            assert 'maxcyc' in simulation
-            cmd.extend([
-                str(simulation['maxcyc']),
-                '-t', 'model.prmtop',
-                '-s', state_file.split('/')[-1],
-            ])
+    if args.method == 'min':
+        assert 'maxcyc' in simulation
+        cmd.extend([
+            str(simulation['maxcyc']),
+            '-t', 'model.prmtop',
+            '-s', state_file,
+        ])
 
-        elif args.method == 'eq':
-            assert 'nstlim' in simulation
-            cmd.extend([
-                str(simulation['nstlim']),
-                '-t', 'model.prmtop',
-                '-s', state_file.split('/')[-1],
-                '-o', out_file.split('/')[-1],
-            ])
+    elif args.method == 'eq':
+        assert 'nstlim' in simulation
+        cmd.extend([
+            str(simulation['nstlim']),
+            '-t', 'model.prmtop',
+            '-s', state_file,
+            '-o', out_file,
+        ])
 
-        else:
-            assert 'nstlim' in simulation
-            cmd.extend([
-                str(simulation['nstlim']),
-                '-t', 'model.prmtop',
-                '-s', state_file.split('/')[-1],
-                '-o', out_file.split('/')[-1],
-                '-T', traj_file.split('/')[-1],
-            ])
+    else:
+        assert 'nstlim' in simulation
+        cmd.extend([
+            str(simulation['nstlim']),
+            '-t', 'model.prmtop',
+            '-s', state_file,
+            '-o', out_file,
+            '-T', traj_file,
+        ])
 
-        simulation_params = (
-            'restraint_weight', 'dt', 'temp0', 'tempi', 'ntb',
-            'pres0', 'ntpr', 'ntwx', 'cutoff'
-        )
-        for key, value in simulation.items():
-            if key in simulation_params:
-                cmd.extend(['--%s' % key, str(value)])
+    for key, value in simulation.items():
+        if key in ('restraint_weight',
+                   'dt',
+                   'temp0',
+                   'tempi',
+                   'ntb',
+                   'pres0',
+                   'ntpr',
+                   'ntwx',
+                   'cutoff'):
+            cmd.extend(['--%s' % key, str(value)])
 
-        subprocess.check_call(cmd)
+    subprocess.check_call(cmd)
 
-        for file_to_upload in (state_file, pdb_file, out_file, traj_file):
-            if os.path.exists(file_to_upload.split('/')[-1]):
-                upload_file("{base_url}/{file}".format(
-                    base_url=base_url,
-                    file=file_to_upload
-                ))
+    for file_to_upload in (state_file, pdb_file, out_file, traj_file):
+        if os.path.exists(file_to_upload):
+            upload_file(base_url, file_to_upload)
 
-    # End of execution
-    finally:
-        os.chdir(cwd)
-        shutil.rmtree(tempdir)
 
 if __name__ == '__main__':
     main()

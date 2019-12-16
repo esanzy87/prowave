@@ -40,7 +40,10 @@ def download_file(base_url, file_path):
     get_response = requests.get('%s/%s' % (base_url, file_path))
     assert get_response.status_code == 200
 
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    base_dir = os.path.dirname(file_path)
+    if base_dir:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
     with open(file_path, 'wb+') as stream:
         stream.write(get_response.content)
         return get_response.content
@@ -87,19 +90,20 @@ def main():
     download_file(base_url, 'model.prmtop')
 
     assert 'reference' in simulation
+    download_file(base_url, simulation['reference'])
+
     assert 'basename' in simulation
     basename = simulation['basename']
     state_file = '%s.npz' % basename
     out_file = '%s.out' % basename
     pdb_file = '%s.pdb' % basename
     traj_file = '%s.dcd' % basename
-
-    download_file(base_url, simulation['reference'])
+    os.makedirs(os.path.dirname(basename))
 
     cmd = [
         '/home/nbcc/prowave_compute/simulation.py',
         args.method,
-        simulation['reference'].split('/')[-1]
+        simulation['reference']
     ]
 
     if args.method == 'min':

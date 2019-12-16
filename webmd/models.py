@@ -219,7 +219,6 @@ class Work(models.Model):
             '--job-name', method,
             '--partition', 'prowave',
             os.path.join(settings.BASE_DIR, 'webmd/scripts/run_simulation.py'),
-            '%s' % self.project.owner.id,
             '%s' % self.id,
             method,
             index

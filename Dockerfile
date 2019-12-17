@@ -7,28 +7,31 @@ RUN cp -r /etc/skel /home/nbcc \
     && mkdir -p /home/nbcc/www/prowave \
     && chown nbcc:nbcc -R /home/nbcc
 
-RUN yum install -y https://centos7.iuscommunity.org/ius-release.rpm \
-    && yum update -y \
-    && yum install -y python36u python36u-libs python36u-devel python36u-setuptools \
-    && unlink /bin/python \
-    && unlink /bin/pip \
-    && ln -s /bin/python3.6 /bin/python \
-    && ln -s /bin/pip3.6 /bin/pip
-
-RUN pip install Cython
-
 COPY ./requirements.txt /requirements.txt
-RUN pip install -r /requirements.txt
 
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN set -ex \
+  && yum install -y python-pip python-virtualenv
+
+RUN set -ex \ 
+  && yum install -y https://centos7.iuscommunity.org/ius-release.rpm \
+  && yum install -y python36u python36u-libs python36u-devel python36u-pip \
+  && yum clean all \
+  && rm -rf /var/cache/yum
 
 USER nbcc
+WORKDIR /home/nbcc
+RUN set -ex \
+  && virtualenv -p python3.6 venv \
+  && source venv/bin/activate \
+  && pip install --upgrade pip \
+  && pip install Cython \
+  && pip install -r /requirements.txt
+
 # ---- environment variables
-ENV PATH /opt/apps/slurm/bin:$PATH
+ENV PATH /home/nbcc/venv/bin:/opt/apps/slurm/bin:$PATH
 
 USER root
+COPY controller-entrypoint.sh /docker-entrypoint.sh
 
 VOLUME [ "/home/nbcc/www", "/data" ]
-
-ENTRYPOINT [ "/usr/local/bin/tini", "--", "/docker-entrypoint.sh" ]
 CMD [ "/bin/bash" ]

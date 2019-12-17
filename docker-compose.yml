@@ -13,7 +13,7 @@ services:
     depends_on:
       - db
     build: .
-    image: nbcc/prowave-controller
+    image: nbcc/prowave
     hostname: slurmctld
     extra_hosts:
       # - gpu67:172.16.3.67
@@ -27,8 +27,22 @@ services:
       - .:/home/nbcc/www/prowave
       - ./_artifacts_/etc_slurm:/etc/slurm
       - ./data:/data
+    entrypoint:
+      - /home/nbcc/www/prowave/controller-entrypoint.sh
     environment:
       - PROWAVE_DB_HOST=db
+  cpu1:
+      depends_on:
+        - controller
+      image: nbcc/prowave
+      hostname: analysis1
+      ports:
+        - 6818:6818
+      volumes:
+        - .:/home/nbcc/www/prowave
+        - ./_artifacts_/etc_slurm:/etc/slurm
+      entrypoint: 
+        - /home/nbcc/www/prowave/analysis-entrypoint.sh
 volumes:
   pgdata:
     external: true

@@ -2,50 +2,13 @@
 """
 webmd.viewsets
 
-<< PROJECT API >>
-/api/webmd/projects/ [GET, POST]
-[GET] fetch project list
-[POST] create a new project
-
-/api/webmd/projects/<project_id>/ [GET]
-[GET] fetch project detail
-
-/api/webmd/projects/<project_id>/protein-model/ [GET, POST, DELETE]
-[GET] fetch protein model of a project
-[POST] create protein model of a project
-[DELETE] delete exist protein model of a project
-
-/api/webmd/projects/<project_id>/protein-model/run/ [POST]
-[POST] batch protein modelling job to computing cluster
-
-
-<< TRAJECTORY API >>
-/api/webmd/trajectories/ [GET, POST]
-[GET] fetch trajectory list
-[POST] create a new trajectory
-
-/api/webmd/trajectories/<trajectory_id>/ [GET, DELETE]
-[GET] fetch trajectory detail with simulation status
-[DELETE] delete (disable) whole trajectory
-
-/api/webmd/trajectories/<trajectory_id>/protein-model/ [POST, PUT, DELETE]
-[POST] create a new protein model of trajectory
-[DELETE] delete protein model of trajectory
-[PUT] run modelling
-
-/api/webmd/trajectories/<trajectory_id>/simulations/ [POST, PUT]
-[POST] create or edit simulation protocol
-[PUT] run next simulation
-
-<< ANALYSIS API >>
-/api/webmd/analyses/ [GET, POST]
-
-/api/webmd/analyses/<analysis_id>/ [GET]
-
-/api/webmd/analyses/<analysis_id/
-
 """
+import csv
 import os
+from glob import glob
+# from io import BytesIO
+
+# import matplotlib
 import yaml
 from django.db import transaction
 from rest_framework import viewsets, routers
@@ -161,8 +124,50 @@ class TrajectoryViewSet(viewsets.ModelViewSet):
         """
         trajectory = self.get_object()
         method = request.data.get('method')
-        index = str(request.data.get('index'))
+        index = request.data.get('index')
         return Response(trajectory.run_simulation(method, index))
+
+
+    @action(['GET'], url_path='analyses', detail=True)
+    def analyses(self, request, pk=None):
+        """
+        webmd.viewsets.TrajectoryViewSet.analyses
+        """
+        trajectory = self.get_object()
+        method = request.data.get('method')
+        assert method in ('rmsd', 'rmsf', 'radgyr', 'sasa')
+        result = [0.0]
+        for csv_file in glob(os.path.join(trajectory.work_dir, 'analyses', '%s*.out' % method)):
+            with open(csv_file, 'r') as stream:
+                rows = csv.reader(stream, delimiter='\t')
+                for row in rows:
+                    try:
+                        result.append(float(row[0]))
+                    except ValueError:
+                        pass
+
+        # matplotlib.use('Agg')
+        # import matplotlib.pyplot as plt
+        # fig, ax = plt.subplots()
+        # ax.plot(range(len(result)), result)
+        # image_data = BytesIO()
+        # fig.tight_layout()
+        # fig.savefig(image_data, format='svg', box_inches='tight')
+        # image_data.seek(0)
+        return Response({
+            'result': result,
+            'plot': ''
+        })
+
+    @action(['POST'], url_path='analyses/run', detail=True)
+    def run_analysis(self, request, pk=None):
+        """
+        webmd.viewsets.TrajectoryViewSet.run_analysis
+        """
+        trajectory = self.get_object()
+        method = request.data.get('method')
+        index = request.data.get('index')
+        return Response(trajectory.run_analysis(method, index))
 
 
 class ProjectViewSet(viewsets.ModelViewSet):

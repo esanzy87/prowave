@@ -10,12 +10,7 @@ class TrajectorySerializer(serializers.ModelSerializer):
     WebmdWork Serializer
     """
     pdb = serializers.ReadOnlyField()
-    models = serializers.ReadOnlyField()
-    chains = serializers.ReadOnlyField()
-    solvent_ions = serializers.ReadOnlyField()
-    non_standards = serializers.ReadOnlyField()
-    disulfide_bond_candidates = serializers.ReadOnlyField()
-    protonation_states = serializers.ReadOnlyField()
+    model_params = serializers.ReadOnlyField()
     is_modelled = serializers.ReadOnlyField()
 
     class Meta:

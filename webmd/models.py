@@ -168,61 +168,62 @@ class Work(models.Model):
         with open(os.path.join(self.work_dir, 'model.pdb'), 'w') as stream:
             stream.write(topo.deserialize())
 
-    @working_directory('/home/nbcc')
     def prepare(self):
         """
         Trajectory.prepare
         """
-        sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
-        cmd = [
-            sbatch_exe,
-            '--job-name', 'TLEAP',
-            '--partition', 'prowave_cpu',
+        subcmd = [
             os.path.join(settings.BASE_DIR, 'webmd/scripts/run_preparation.py'),
-            '%s' % self.project.owner_id,
-            '%s' % self.id,
+            '%d' % self.id,
         ]
-
-        try:
-            output = subprocess.check_output(cmd)
-            job_id = output.decode().split()[-1]
-            slurm_job_id = int(job_id)
-            with open(os.path.join(self.work_dir, 'slurm_job_id'), 'w') as f:
-                f.write('%d' % slurm_job_id)
-
-            simulations_template_path = os.path.join(
+        result = self.submit_batch('prep', 'webmd_cpu', subcmd)
+        if result['run']:
+            template_file = os.path.join(
                 settings.BASE_DIR,
                 '_artifacts_/simulations_templates/default.yml'
             )
-            simulations_path = os.path.join(self.work_dir, 'simulations.yml')
-            shutil.copy2(simulations_template_path, simulations_path)
-            return {
-                'run': True,
-                'slurm_job_id': slurm_job_id,
-                'trajectory_id': self.id
-            }
-        except ValueError:
-            return {
-                'run': False,
-                'slurm_job_id': -1,
-                'trajectory_id': self.id
-            }
+            shutil.copy2(
+                template_file,
+                os.path.join(self.work_dir, 'simulations.yml')
+            )
+        return result
 
-    @working_directory('/home/nbcc')
     def run_simulation(self, method, index):
         """
         Trajectory.run_simulation
         """
-        sbatch_exe = os.path.join(settings.SLURM_HOME, 'bin/sbatch')
-        cmd = [
-            sbatch_exe,
-            '--job-name', method,
-            '--partition', 'prowave',
+        subcmd = [
             os.path.join(settings.BASE_DIR, 'webmd/scripts/run_simulation.py'),
-            '%s' % self.id,
+            '%d' % self.id,
             method,
-            index
+            '%s' % index
         ]
+        return self.submit_batch(method, 'webmd', subcmd)
+
+    def run_analysis(self, method, index):
+        """
+        Trajectory.run_analysis
+        """
+        subcmd = [
+            os.path.join(settings.BASE_DIR, 'webmd/scripts/run_analysis.py'),
+            '%d' % self.id,
+            method,
+            '%s' % index,
+        ]
+        return self.submit_batch(method, 'webmd_cpu', subcmd)
+
+    @working_directory('/home/nbcc')
+    def submit_batch(self, job_name, partition, subcmd):
+        """
+        Trajectory.submit_batch
+        """
+        cmd = [
+            os.path.join(settings.SLURM_HOME, 'bin/sbatch'),
+            '--job-name', job_name,
+            '--partition', partition,
+        ]
+
+        cmd.extend(subcmd)
         output = subprocess.check_output(cmd)
         job_id = output.decode().split()[-1]
         try:
@@ -242,6 +243,7 @@ class Work(models.Model):
                 'trajectory_id': self.id
             }
 
+
     @property
     def slurm_job_id(self):
         """
@@ -256,6 +258,9 @@ class Work(models.Model):
 
     @property
     def running(self):
+        """
+        이 Trajectory가 batch한 task가 현재 실행중인지 체크
+        """
         squeue_lines = subprocess.check_output(['squeue', '-h']).decode().split('\n')
         for line in squeue_lines:
             job_status = line.strip().split()
@@ -279,47 +284,32 @@ class Work(models.Model):
         work_dir
         """
         return os.path.join(settings.WEBMD_DATA_DIR, '%d' % self.id)
- 
-    def get_topology(self, filename):
-        with open(os.path.join(self.work_dir, filename), 'r') as stream:
+
+    @property
+    def model_params(self):
+        """
+        MODEL parameters
+        Modeller에서 사용되는 파라메터
+        """
+        with open(os.path.join(self.work_dir, self.filename), 'r') as stream:
             topo = Topology(stream)
-        return topo
 
-    @property
-    def models(self):
-        topo = self.get_topology(self.filename)
-        return [i for i in range(len(topo.models))]
-
-    @property
-    def chains(self):
-        topo = self.get_topology(self.filename)
-        return topo.chains
-
-    @property
-    def solvent_ions(self):
-        topo = self.get_topology(self.filename)
-        return topo.solvent_ions
-
-    @property
-    def non_standards(self):
-        if not os.path.exists(os.path.join(self.work_dir, 'cleaned.pdb')):
-            return []
-        topo = self.get_topology('cleaned.pdb')
-        return topo.non_standards
-
-    @property
-    def disulfide_bond_candidates(self):
-        if not os.path.exists(os.path.join(self.work_dir, 'cleaned.pdb')):
-            return []
-        topo = self.get_topology('cleaned.pdb')
-        return topo.disulfide_bond_candidates
-
-    @property
-    def protonation_states(self):
-        if not os.path.exists(os.path.join(self.work_dir, 'cleaned.pdb')):
-            return []
-        topo = self.get_topology('cleaned.pdb')
-        return topo.protonation_states
+        params = {
+            'models': [i for i in range(len(topo.models))],
+            'chains': topo.chains,
+            'solvent_ions': topo.solvent_ions,
+            'non_standards': [],
+            'disulfide_bond_candidates': [],
+            'protonation_states': [],
+        }
+        cleaned_pdb_file = os.path.join(self.work_dir, 'cleaned.pdb')
+        if os.path.exists(cleaned_pdb_file):
+            with open(cleaned_pdb_file, 'r') as stream:
+                cleaned_topo = Topology(stream)
+            params['non_standards'] = cleaned_topo.non_standards
+            params['disulfide_bond_candidates'] = cleaned_topo.disulfide_bond_candidates
+            params['protonation_states'] = cleaned_topo.protonation_states
+        return params
 
     @property
     def is_modelled(self):

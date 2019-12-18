@@ -64,12 +64,11 @@ def rmsf(ref, trajs):
     xyz = np.concatenate(coords, axis=0)
     refxyz = np.mean(ref.xyz[:, sel, :], axis=0)
     rmsfs = np.sqrt(3.0 * np.mean((xyz - refxyz) ** 2, axis=(0, 2))) * 10.0  # nm to Angstrom
-    atoms = list(ref.topology.subset(sel).to_openmm().atoms())
+    # atoms = list(ref.topology.subset(sel).to_openmm().atoms())
     with open('rmsf.out', 'w') as stream:
         stream.write('# RMSF\n')
-        for i in range(len(sel)):
-            resnum = atoms[i].residue.id
-            stream.write('{:6s} {:.4f}\n'.format(resnum, rmsfs[i]))
+        for value in rmsfs:
+            stream.write('{:.4f}\n'.format(value))
     return 'rmsf.out'
 
 
@@ -79,12 +78,12 @@ def radgyr(ref, trajs, mass_weighted=True):
     """
     sel = ref.topology.select('protein')
     if mass_weighted:
-        masses = np.array([atom.element.masses for atom in ref.topology.atoms])[sel]
+        masses = np.array([atom.element.mass for atom in ref.topology.atoms])[sel]
     else:
         masses = np.ones(sel.size)
 
     weights = masses / masses.sum()
-    with open('analyses/radgyr.out', 'w') as stream:
+    with open('radgyr.out', 'w') as stream:
         stream.write('# radgyr')
         for frame in trajs:
             xyz = frame.xyz[:, sel, :]

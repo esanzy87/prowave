@@ -6,11 +6,13 @@ webmd.viewsets
 import csv
 import os
 from glob import glob
-# from io import BytesIO
+from io import BytesIO
 
-# import matplotlib
+import matplotlib
+import numpy as np
 import yaml
 from django.db import transaction
+from django.http.response import HttpResponse
 from rest_framework import viewsets, routers
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -19,6 +21,9 @@ from rest_framework.parsers import FormParser, MultiPartParser
 
 from .models import Project, Work as Trajectory
 from .serializers import ProjectSerializer, TrajectorySerializer
+
+
+matplotlib.use('Agg')
 
 
 class TrajectoryViewSet(viewsets.ModelViewSet):
@@ -133,31 +138,88 @@ class TrajectoryViewSet(viewsets.ModelViewSet):
         """
         webmd.viewsets.TrajectoryViewSet.analyses
         """
-        trajectory = self.get_object()
-        method = request.data.get('method')
-        assert method in ('rmsd', 'rmsf', 'radgyr', 'sasa')
-        result = [0.0]
-        for csv_file in glob(os.path.join(trajectory.work_dir, 'analyses', '%s*.out' % method)):
-            with open(csv_file, 'r') as stream:
-                rows = csv.reader(stream, delimiter='\t')
-                for row in rows:
-                    try:
-                        result.append(float(row[0]))
-                    except ValueError:
-                        pass
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
 
-        # matplotlib.use('Agg')
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots()
-        # ax.plot(range(len(result)), result)
-        # image_data = BytesIO()
-        # fig.tight_layout()
-        # fig.savefig(image_data, format='svg', box_inches='tight')
-        # image_data.seek(0)
-        return Response({
-            'result': result,
-            'plot': ''
-        })
+        trajectory = self.get_object()
+        method = request.GET.get('method')
+        assert method in ('rmsd', 'rmsf', 'radgyr', 'sasa')
+
+        if method == 'rmsd':
+            result = [0.0]
+            for csv_file in glob(os.path.join(trajectory.work_dir, 'analyses', '%s*.out' % method)):
+                with open(csv_file, 'r') as stream:
+                    rows = csv.reader(stream, delimiter='\t')
+                    for row in rows:
+                        try:
+                            result.append(float(row[0]))
+                        except ValueError:
+                            pass
+
+            ax.plot([(i * 5) for i in range(len(result))], result)
+            ax.set_xlabel('Time (ps)')
+            ax.set_ylabel('RMSD (Å)')
+        if method == 'rmsf':
+            results = []
+            for csv_file in glob(os.path.join(trajectory.work_dir, 'analyses', '%s*.out' % method)):
+                with open(csv_file, 'r') as stream:
+                    result = []
+                    rows = csv.reader(stream, delimiter='\t')
+                    for row in rows:
+                        try:
+                            result.append(float(row[0]))
+                        except ValueError:
+                            pass
+                results.append(result)
+            result = np.average(np.array(results), axis=0)
+            ax.plot(range(1, len(result)+1), result)
+            ax.set_xlabel('Residue Number')
+            ax.set_ylabel('RMSF (Å)')
+        if method == 'radgyr':
+            result = []
+            for csv_file in glob(os.path.join(trajectory.work_dir, 'analyses', '%s*.out' % method)):
+                with open(csv_file, 'r') as stream:
+                    rows = csv.reader(stream, delimiter='\t')
+                    for row in rows:
+                        try:
+                            result.append(float(row[0]))
+                        except ValueError:
+                            pass
+
+            window = 5
+            cumsum = np.cumsum(result)
+            cumsum[window:] = cumsum[window:] - cumsum[:-window]
+            rolling_mean = cumsum[window-1:] / window
+            ax.plot([(i * 5) for i in range(len(result))], result, color='#dddddd')
+            ax.plot([(i * 5) for i in range(window, len(result)+1)], rolling_mean)
+            # ax.plot([(i * 5) for i in range(len(result))], result)
+            ax.set_xlabel('Time (ps)')
+            ax.set_ylabel('Radius of Gyration (radian)')
+        if method == 'sasa':
+            result = []
+            for csv_file in glob(os.path.join(trajectory.work_dir, 'analyses', '%s*.out' % method)):
+                with open(csv_file, 'r') as stream:
+                    rows = csv.reader(stream, delimiter='\t')
+                    for row in rows:
+                        try:
+                            result.append(float(row[0]))
+                        except ValueError:
+                            pass
+
+            window = 5
+            cumsum = np.cumsum(result)
+            cumsum[window:] = cumsum[window:] - cumsum[:-window]
+            rolling_mean = cumsum[window-1:] / window
+            ax.plot([(i * 5) for i in range(len(result))], result, color='#dddddd')
+            ax.plot([(i * 5) for i in range(window, len(result)+1)], rolling_mean)
+            ax.set_xlabel('Time (ps)')
+            ax.set_ylabel('SASA (nm^2)')
+
+        image_data = BytesIO()
+        fig.tight_layout()
+        fig.savefig(image_data, format='svg', box_inches='tight')
+        image_data.seek(0)        
+        return HttpResponse(image_data, 'image/svg')
 
     @action(['POST'], url_path='analyses/run', detail=True)
     def run_analysis(self, request, pk=None):

@@ -210,7 +210,7 @@ class Work(models.Model):
             method,
             '%s' % index,
         ]
-        return self.submit_batch(method, 'webmd_cpu', subcmd)
+        return self.submit_batch(method, 'webmd', subcmd)
 
     @working_directory('/home/nbcc')
     def submit_batch(self, job_name, partition, subcmd):

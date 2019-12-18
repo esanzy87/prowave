@@ -98,7 +98,7 @@ def main():
     out_file = '%s.out' % basename
     pdb_file = '%s.pdb' % basename
     traj_file = '%s.dcd' % basename
-    os.makedirs(os.path.dirname(basename))
+    # os.makedirs(os.path.dirname(basename))
 
     cmd = [
         '/home/nbcc/prowave_compute/simulation.py',

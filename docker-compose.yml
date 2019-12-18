@@ -35,7 +35,9 @@ services:
       depends_on:
         - controller
       image: nbcc/prowave
-      hostname: analysis1
+      hostname: cpu1
+      extra_hosts:
+        - slurmctld:172.16.0.30
       ports:
         - 6818:6818
       volumes:

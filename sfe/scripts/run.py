@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/nbcc/anaconda3/bin/python
 """
 sfe.scripts.run
 """

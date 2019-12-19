@@ -39,7 +39,7 @@ class WorkSerializer(serializers.ModelSerializer):
     result = serializers.JSONField()
     status = serializers.JSONField()
     pdb = serializers.ReadOnlyField()
-    plot = serializers.ReadOnlyField()
+    # plot = serializers.ReadOnlyField()
 
     class Meta:
         """
